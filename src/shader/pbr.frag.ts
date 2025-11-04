@@ -127,7 +127,6 @@ vec3 get_radiance_BRDF(PointLight point_light, Material material, vec3 albedo, f
 vec3 get_radiance_BRDF(DirectionalLight directional_light, Material material, vec3 albedo, float k_d, float k_s) {
     return get_radiance_BRDF(directional_light.color, directional_light.intensity, normalize(-directional_light.direction), albedo, k_d, k_s);
 }
-
 //endregion
 
 //region IBL
@@ -153,7 +152,7 @@ vec3 get_radiance_BRDF_baked(vec3 albedo, float k_d, float k_s) {
   vec2 textureCoo = clamp(((spherical / vec2(2. * PI, PI)) + 0.5), 0., 1.);
   vec3 diffuse = albedo * RGBMDecode(texture(diffuse_texture, textureCoo)) / PI;
   
-  float n = min(uMaterial.alpha * 6., 6.);
+  float n = min(uMaterial.alpha * 5., 5.);
   float n_ratio = fract(n);
   n = floor(n);
   vec2 textureCooN = get_textureCoo(textureCoo, n);
