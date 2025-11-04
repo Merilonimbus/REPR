@@ -148,7 +148,7 @@ vec2 get_textureCoo(vec2 textureCoo, float n) {
 }
 
 vec3 get_radiance_BRDF_baked(vec3 albedo, float k_d, float k_s) {
-  vec2 spherical = cartesianToSpherical(vNormalWS);
+  vec2 spherical = cartesianToSpherical(normalize(-reflect(vDirectionWS, vNormalWS)));
 
   vec2 textureCoo = clamp(((spherical / vec2(2. * PI, PI)) + 0.5), 0., 1.);
   vec3 diffuse = albedo * RGBMDecode(texture(diffuse_texture, textureCoo)) / PI;
