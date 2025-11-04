@@ -223,10 +223,10 @@ class Application {
         mat4.fromTranslation(LS_to_WS, WsSphereTranslation);
 
 
-        this._uniforms['k_s'] = (r + 1) / (rows + 1);
+        this._uniforms['k_s'] = r / (rows - 1);
         this._uniforms['k_d'] = 1. - this._uniforms['k_s'];
 
-        this._uniforms['uMaterial.alpha'] = (c + 1) / (columns + 1);
+        this._uniforms['uMaterial.alpha'] = c / (columns - 1);
 
         // Draw the triangles
         this._context.draw(this._geometry, this._shader, this._uniforms);
