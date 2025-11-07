@@ -17,7 +17,7 @@ struct Material
 {
   vec3 albedo;
   float alpha;
-  float f_0;
+  float metallicity;
 };
 
 struct PointLight
@@ -42,9 +42,6 @@ uniform PointLight uPointLight1;
 uniform PointLight uPointLight2;
 
 uniform DirectionalLight uDirectionalLight;
-
-uniform float k_d;
-uniform float k_s;
 
 uniform sampler2D specular_texture;
 uniform sampler2D diffuse_texture;
@@ -92,7 +89,7 @@ float D(vec3 h, float alpha){
   return alpha_2 / (PI * pow(pow(dot(vNormalWS, h), 2.) * (alpha_2 - 1.) + 1., 2.));
 }
 
-float F(vec3 h, float f_0){
+vec3 F(vec3 h, vec3 f_0){
   return f_0 + (1. - f_0) * pow(1. - dot(vDirectionWS, h), 5.);
 }
 
@@ -101,12 +98,13 @@ float G(vec3 w, float k) {
   return d / (d * (1. - k) + k);
 }
 
-float get_specular(float alpha, float f_0, vec3 w_i) {
-  vec3 h = normalize(w_i + vDirectionWS);
+float get_specular(float alpha, vec3 w_i, vec3 h) {
   float k = pow(alpha + 1., 2.) / 8.;
+  
   float d = dot(vDirectionWS, vNormalWS) * dot(w_i, vNormalWS);
+  
   if (d > 0.) {
-    return D(h, alpha) * F(h, f_0) * G(w_i, k) * G(vDirectionWS, k) / (4. * d);
+    return D(h, alpha) * G(w_i, k) * G(vDirectionWS, k) / (4. * d);
   } else {
     return 0.;
   }
@@ -116,16 +114,30 @@ vec3 get_difuse(vec3 albedo, vec3 w_i) {
   return albedo * dot(vNormalWS, w_i) / PI;
 }
 
-vec3 get_radiance_BRDF(vec3 light_color, float intensity, vec3 w_i, vec3 albedo, float k_d, float k_s) {
-    return clamp(intensity * light_color * (k_d * clamp(get_difuse(albedo, w_i), 0., 1.) + k_s * clamp(get_specular(uMaterial.alpha, uMaterial.f_0, w_i), 0., 1.)), 0., 1.);
+vec3 get_radiance_BRDF(vec3 light_color, float intensity, vec3 w_i, vec3 albedo, float metallicity) {
+    vec3 h = normalize(w_i + vDirectionWS);
+    vec3 f_0 = vec3(.04);
+
+    f_0 = mix(f_0, albedo, metallicity);
+
+    vec3 k_s = F(h, f_0);
+    vec3 k_d = (1. - k_s) * (1. - metallicity);
+
+    if (state == 2) {
+        k_s = vec3(0.);
+    } else if (state == 3) {
+        k_d = vec3(0.);
+    }
+
+    return clamp(intensity * light_color * (k_d * clamp(get_difuse(albedo, w_i), 0., 1.) + k_s * clamp(get_specular(uMaterial.alpha, w_i, h), 0., 1.)), 0., 1.);
 }
 
-vec3 get_radiance_BRDF(PointLight point_light, Material material, vec3 albedo, float k_d, float k_s) {
-    return get_radiance_BRDF(point_light.color, point_light.intensity, normalize(point_light.position - vPositionWS), albedo, k_d, k_s);
+vec3 get_radiance_BRDF(PointLight point_light, Material material, vec3 albedo) {
+    return get_radiance_BRDF(point_light.color, point_light.intensity, normalize(point_light.position - vPositionWS), albedo, material.metallicity);
 }
 
-vec3 get_radiance_BRDF(DirectionalLight directional_light, Material material, vec3 albedo, float k_d, float k_s) {
-    return get_radiance_BRDF(directional_light.color, directional_light.intensity, normalize(-directional_light.direction), albedo, k_d, k_s);
+vec3 get_radiance_BRDF(DirectionalLight directional_light, Material material, vec3 albedo) {
+    return get_radiance_BRDF(directional_light.color, directional_light.intensity, normalize(-directional_light.direction), albedo, material.metallicity);
 }
 //endregion
 
@@ -146,7 +158,7 @@ vec2 get_textureCoo(vec2 textureCoo, float n) {
     return vec2(0., 1. - 1. / pow(2., n)) + textureCoo * vec2(1. / pow(2., n), 1. / pow(2., 1. + n));
 }
 
-vec3 get_radiance_BRDF_baked(vec3 albedo, float k_d, float k_s) {
+vec3 get_radiance_BRDF_baked(vec3 albedo, vec3 k_d, vec3 k_s) {
   vec2 spherical = cartesianToSpherical(normalize(-reflect(vDirectionWS, vNormalWS)));
 
   vec2 textureCoo = clamp(((spherical / vec2(2. * PI, PI)) + 0.5), 0., 1.);
@@ -170,6 +182,12 @@ void main()
 
   vec3 radiance = vec3(0.);
 
+  vec3 h = normalize(vNormalWS + vDirectionWS);
+  vec3 f_0 = mix(vec3(.04), albedo, uMaterial.metallicity);
+
+  vec3 k_s = F(h, f_0);
+  vec3 k_d = (1. - k_s) * (1. - uMaterial.metallicity);
+
   switch(state) {
   case 0: // Warm up 1
     radiance = radiance + sRGBToLinear(vec4((vNormalWS + 1.0) / vec3(2), 1.0)).rgb;
@@ -178,31 +196,31 @@ void main()
     radiance = radiance + sRGBToLinear(vec4((vDirectionWS + 1.0) / 2.0, 1.0)).rgb;
     break;
   case 2: // Diffuse BRDF
-    radiance = radiance + get_radiance_BRDF(uPointLight1, uMaterial, albedo, k_d, 0.);
-    radiance = radiance + get_radiance_BRDF(uPointLight2, uMaterial, albedo, k_d, 0.);
-    radiance = radiance + get_radiance_BRDF(uDirectionalLight, uMaterial, albedo, k_d, 0.);
+    radiance = radiance + get_radiance_BRDF(uPointLight1, uMaterial, albedo);
+    radiance = radiance + get_radiance_BRDF(uPointLight2, uMaterial, albedo);
+    radiance = radiance + get_radiance_BRDF(uDirectionalLight, uMaterial, albedo);
 
     radiance = ReinhardToneMapping(radiance);
     break;
   case 3: // Specular BRDF
-    radiance = radiance + get_radiance_BRDF(uPointLight1, uMaterial, albedo, 0., k_s);
-    radiance = radiance + get_radiance_BRDF(uPointLight2, uMaterial, albedo, 0., k_s);
-    radiance = radiance + get_radiance_BRDF(uDirectionalLight, uMaterial, albedo, 0., k_s);
+    radiance = radiance + get_radiance_BRDF(uPointLight1, uMaterial, albedo);
+    radiance = radiance + get_radiance_BRDF(uPointLight2, uMaterial, albedo);
+    radiance = radiance + get_radiance_BRDF(uDirectionalLight, uMaterial, albedo);
 
     radiance = ReinhardToneMapping(radiance);
     break;
   case 4: // Combined BRDF
-    radiance = radiance + get_radiance_BRDF(uPointLight1, uMaterial, albedo, k_d, k_s);
-    radiance = radiance + get_radiance_BRDF(uPointLight2, uMaterial, albedo, k_d, k_s);
-    radiance = radiance + get_radiance_BRDF(uDirectionalLight, uMaterial, albedo, k_d, k_s);
+    radiance = radiance + get_radiance_BRDF(uPointLight1, uMaterial, albedo);
+    radiance = radiance + get_radiance_BRDF(uPointLight2, uMaterial, albedo);
+    radiance = radiance + get_radiance_BRDF(uDirectionalLight, uMaterial, albedo);
 
     radiance = ReinhardToneMapping(radiance);
     break;
   case 5: // Diffuse IBL
-    radiance = get_radiance_BRDF_baked(albedo, k_d, 0.);
+    radiance = get_radiance_BRDF_baked(albedo, k_d, vec3(0.));
     break;
   case 6: // Specular IBL
-    radiance = get_radiance_BRDF_baked(albedo, 0., k_s);
+    radiance = get_radiance_BRDF_baked(albedo, vec3(0.), k_s);
     break;
   case 7: // Combined IBL
     radiance = get_radiance_BRDF_baked(albedo, k_d, k_s);

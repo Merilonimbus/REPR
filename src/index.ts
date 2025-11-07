@@ -52,7 +52,7 @@ class Application {
       'step': 0,
       'uMaterial.albedo': vec3.create(),
       'uMaterial.alpha': 0.1,
-      'uMaterial.f0': 1.,
+      'uMaterial.metallicity': 1.,
       'uCamera.position': vec3.create(),
       'uModel.LS_to_WS': mat4.create(),
       'uCamera.WS_to_CS': mat4.create(),
@@ -65,8 +65,6 @@ class Application {
       'uDirectionalLight.direction': vec3.create(),
       'uDirectionalLight.color': vec3.create(),
       'uDirectionalLight.intensity': 1.,
-      'k_s': 0.,
-      'k_d': 0.,
       'specular_texture': Texture2D.prototype,
       'diffuse_texture': Texture2D.prototype,
       'state': 0.,
@@ -180,7 +178,7 @@ class Application {
       props.albedo[1] / 255,
       props.albedo[2] / 255);
     this._uniforms['uMaterial.alpha'] = .5;
-    this._uniforms['uMaterial.f_0'] = 0.75;
+    this._uniforms['uMaterial.metallicity'] = 1.;
     this._uniforms['uCamera.position'] = this._camera._position;
     this._uniforms['uPointLight1.position'] = vec3.fromValues(
       10, 10, 2.5
@@ -197,8 +195,6 @@ class Application {
     );
     this._uniforms['uDirectionalLight.color'] = vec3.fromValues(1., 1., 1.);
     this._uniforms['uDirectionalLight.intensity'] = props.directionalLightOn ? 1. : 0.;
-    this._uniforms['k_s'] = 0.5;
-    this._uniforms['k_d'] = 0.5;
 
 
     // Set World-Space to Clip-Space transformation matrix (a.k.a view-projection).
@@ -223,10 +219,8 @@ class Application {
         mat4.fromTranslation(LS_to_WS, WsSphereTranslation);
 
 
-        this._uniforms['k_s'] = r / (rows - 1);
-        this._uniforms['k_d'] = 1. - this._uniforms['k_s'];
-
-        this._uniforms['uMaterial.alpha'] = c / (columns - 1);
+        this._uniforms['uMaterial.metallicity'] = r / (rows - 1);
+        this._uniforms['uMaterial.alpha'] = (c + 1) / (columns + 1);
 
         // Draw the triangles
         this._context.draw(this._geometry, this._shader, this._uniforms);
